@@ -135,8 +135,8 @@ jobs:
         run: |
           mkdir -p app/src/androidTest/assets
           curl -fL --retry 5 -o /tmp/two.wav https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/2-two-speakers-en.wav
-          ffmpeg -loglevel error -y -i /tmp/two.wav -t 40 -ac 1 -ar 16000 -c:a pcm_s16le -map_metadata -1 -fflags +bitexact -flags:a +bitexact app/src/androidTest/assets/two.wav
-          ffmpeg -loglevel error -y -i /tmp/two.wav -t 8 -ac 1 -ar 16000 -c:a pcm_s16le -map_metadata -1 -fflags +bitexact -flags:a +bitexact app/src/androidTest/assets/short.wav
+          python3 scripts/prepare_test_audio.py /tmp/two.wav app/src/androidTest/assets/two.wav 40
+          python3 scripts/prepare_test_audio.py /tmp/two.wav app/src/androidTest/assets/short.wav 8
           ls -l app/src/androidTest/assets; xxd app/src/androidTest/assets/short.wav | head -3
       - name: Compilation (release + tests instrumentés)
         run: ./gradlew --no-daemon -Pe2e assembleRelease assembleReleaseAndroidTest
