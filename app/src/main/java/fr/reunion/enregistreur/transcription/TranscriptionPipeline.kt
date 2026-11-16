@@ -58,6 +58,9 @@ class TranscriptionPipeline(
 
     private fun checkCancel() { if (isCancelled()) throw Cancelled() }
 
+    /** Étape en cours, conservée sur disque pour expliquer un éventuel arrêt brutal. */
+    private fun step(label: String) = setStep(context, "$label (réunion ${meeting.id})")
+
     suspend fun run() {
         check(audio.exists()) { "Fichier audio introuvable" }
         Wav.repairHeader(audio)
@@ -88,6 +91,7 @@ class TranscriptionPipeline(
             checkCancel()
             transcribe(reader)
             repo.setStage(meeting.id, STAGE_DONE)
+            setStep(context, null)
         }
     }
 
@@ -104,7 +108,16 @@ class TranscriptionPipeline(
         if (n == 1 || audioSec < 3) { // un seul participant : inutile de calculer
             writeTurns(emptyList()); return
         }
+        // Si une tentative précédente s'est arrêtée brutalement pendant cette étape,
+        // on la saute pour garantir l'obtention du texte.
+        val marker = File(dir, "diar_running")
+        if (marker.exists()) {
+            Log.w(TAG, "Plantage précédent pendant la diarisation : étape ignorée")
+            writeTurns(emptyList()); marker.delete(); return
+        }
+        marker.writeText("1")
         try {
+            step("chargement du modèle de diarisation")
             val sd = Models.diarization(context.assets, if (single && n > 0) n else -1, CLUSTER_THRESHOLD)
             val extractor = if (single) null else Models.embeddingExtractor(context.assets)
             val chunks = mutableListOf<ChunkResult>()
@@ -118,6 +131,7 @@ class TranscriptionPipeline(
                     val len = min(CHUNK_SAMPLES, total - start).toInt()
                     val samples = reader.read(start, len)
                     val offsetMs = start * 1000 / Wav.SAMPLE_RATE
+                    step("diarisation, tranche ${c + 1}/$nChunks")
                     val segs: Array<OfflineSpeakerDiarizationSegment> =
                         sd.processWithCallback(samples, { done, tot, _ ->
                             val f = (c + done.toDouble() / max(1, tot)) / nChunks
@@ -160,6 +174,8 @@ class TranscriptionPipeline(
             // La diarisation ne doit jamais empêcher d'obtenir le texte.
             Log.e(TAG, "Diarisation impossible, un seul intervenant sera utilisé", t)
             writeTurns(emptyList())
+        } finally {
+            marker.delete()
         }
     }
 
@@ -236,6 +252,7 @@ class TranscriptionPipeline(
 
     private fun detectSpeech(reader: WavReader) {
         val t0 = SystemClock.elapsedRealtime()
+        step("détection de la parole (VAD)")
         val vad = Models.vad(context.assets)
         val regions = mutableListOf<SpeechRegion>()
         fun drain() {
@@ -286,6 +303,7 @@ class TranscriptionPipeline(
         if (pending.isEmpty()) return
         val doneSec0 = (all.sumOf { it.endMs - it.startMs } - pending.sumOf { it.endMs - it.startMs }) / 1000.0
         report("Chargement du modèle ${model.key}", 2, doneSec0 / speechSec.coerceAtLeast(1e-6), 0.0)
+        step("chargement de Whisper ${model.key}")
         val recognizer = Models.recognizer(context.assets, model)
         val t0 = SystemClock.elapsedRealtime()
         var processedSec = 0.0
@@ -296,6 +314,7 @@ class TranscriptionPipeline(
                 val start = seg.startMs * Wav.SAMPLE_RATE / 1000 - pad
                 val end = seg.endMs * Wav.SAMPLE_RATE / 1000 + pad
                 val samples = normalize(reader.read(max(0, start), (end - max(0, start)).toInt()))
+                step("transcription du segment à ${seg.startMs / 1000} s")
                 val text = if (samples.size < Wav.SAMPLE_RATE / 5) "" else {
                     val stream = recognizer.createStream()
                     try {
@@ -350,6 +369,16 @@ class TranscriptionPipeline(
         private const val CHUNK_SAMPLES = 30L * 60 * Wav.SAMPLE_RATE
         private const val CLUSTER_THRESHOLD = 0.5f
         private const val PAD_MS = 150L
+
+        private fun stepFile(context: Context) = File(context.filesDir, "transcription_step.txt")
+
+        fun setStep(context: Context, label: String?) {
+            val f = stepFile(context)
+            if (label == null) f.delete() else try { f.writeText(label) } catch (_: Throwable) { }
+        }
+
+        /** Dernière étape enregistrée (non nulle si le processus a été tué en cours de route). */
+        fun lastStep(context: Context): String? = stepFile(context).takeIf { it.exists() }?.readText()
 
         /** Supprime les résultats intermédiaires (avant une nouvelle transcription). */
         fun clearIntermediate(dir: File) {

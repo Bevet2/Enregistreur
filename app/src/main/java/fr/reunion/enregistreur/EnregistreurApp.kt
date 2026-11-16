@@ -8,6 +8,7 @@ import fr.reunion.enregistreur.audio.Wav
 import fr.reunion.enregistreur.data.AppDatabase
 import fr.reunion.enregistreur.data.MeetingStatus
 import fr.reunion.enregistreur.data.Repository
+import fr.reunion.enregistreur.transcription.TranscriptionPipeline
 import fr.reunion.enregistreur.transcription.TranscriptionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,11 +58,36 @@ class EnregistreurApp : Application() {
             }
         }
         if (TranscriptionState.state.value.meetingId == null) {
+            val step = TranscriptionPipeline.lastStep(this)
+            val crash = if (step != null) lastExitDescription() else null
             for (m in repository.meetingsWithStatus(MeetingStatus.TRANSCRIBING)) {
-                repository.setStatus(m.id, MeetingStatus.INTERRUPTED)
+                if (step != null && crash != null) {
+                    repository.setStatus(
+                        m.id, MeetingStatus.FAILED,
+                        "l'application s'est arrêtée ($crash) pendant : $step. " +
+                            "Touchez Réessayer : l'étape fautive sera contournée si possible.",
+                    )
+                } else repository.setStatus(m.id, MeetingStatus.INTERRUPTED)
             }
+            TranscriptionPipeline.setStep(this, null)
         }
     }
+
+    /** Cause du dernier arrêt du processus (plantage, mémoire…), ou null si arrêt normal. */
+    private fun lastExitDescription(): String? = try {
+        val am = getSystemService(android.app.ActivityManager::class.java)
+        val info = am.getHistoricalProcessExitReasons(packageName, 0, 1).firstOrNull()
+        when (info?.reason) {
+            android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "plantage du moteur natif"
+            android.app.ApplicationExitInfo.REASON_CRASH -> "erreur : ${info.description ?: "inconnue"}"
+            android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "mémoire insuffisante"
+            android.app.ApplicationExitInfo.REASON_SIGNALED -> "processus tué (signal ${info.status})"
+            android.app.ApplicationExitInfo.REASON_ANR -> "application bloquée (ANR)"
+            android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "ressources excessives"
+            null -> null
+            else -> "code ${info.reason} ${info.description ?: ""}".trim()
+        }
+    } catch (_: Throwable) { null }
 
     companion object {
         const val CHANNEL_RECORDING = "recording"

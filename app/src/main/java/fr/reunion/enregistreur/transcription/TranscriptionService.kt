@@ -112,6 +112,7 @@ class TranscriptionService : Service() {
                 repo.setStatus(id, MeetingStatus.FAILED, t.message ?: t.javaClass.simpleName)
                 notifyDone(id, meeting.title, t.message ?: "erreur inconnue")
             }
+            TranscriptionPipeline.setStep(this, null)
         }
         TranscriptionState.mutable.value = TranscriptionState.State()
         wakeLock?.let { if (it.isHeld) it.release() }

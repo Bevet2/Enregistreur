@@ -296,7 +296,7 @@ private fun Header(
                 "Transcription interrompue. Elle reprendra là où elle s'était arrêtée.", "Reprendre", onResume,
             )
             m.status == MeetingStatus.FAILED -> InfoCard(
-                "La transcription a échoué : ${m.errorMessage ?: "erreur inconnue"}", "Réessayer", onTranscribe,
+                "La transcription a échoué : ${m.errorMessage ?: "erreur inconnue"}", "Réessayer", onResume,
                 error = true,
             )
         }
