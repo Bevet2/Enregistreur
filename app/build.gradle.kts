@@ -50,11 +50,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // En test e2e, pas de R8 (il retire des classes dont le runner de test a besoin).
+            isMinifyEnabled = !e2e
+            isShrinkResources = !e2e
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             testProguardFiles("proguard-test-rules.pro")
-            if (e2e) proguardFile("proguard-e2e.pro")
             signingConfig = if (releaseKeystore != null) {
                 signingConfigs.getByName("release")
             } else {
