@@ -65,9 +65,12 @@ class TranscriptionService : Service() {
     }
 
     private fun goForeground() {
-        val type = if (Build.VERSION.SDK_INT >= 35) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
-        else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-        ServiceCompat.startForeground(this, NOTIF_ID, progressNotification("Préparation…", 0, null), type)
+        // Type « dataSync » : le type « mediaProcessing » faisait refuser le démarrage par
+        // Android 15 (InvalidForegroundServiceTypeException) et l'app se fermait.
+        startForeground(
+            NOTIF_ID, progressNotification("Préparation…", 0, null),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+        )
         if (wakeLock == null) {
             wakeLock = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Enregistreur:transcription")
