@@ -81,23 +81,16 @@ l'ancien (touchez *Mettre à jour*). Vos réunions sont conservées.
 
 ## 🔑 Signature de l'APK (secrets GitHub)
 
-Le workflow signe l'APK avec votre clé si ces 4 secrets existent ; sinon il utilise une clé de debug
-temporaire pour que le build fonctionne quand même.
+Le workflow signe l'APK avec votre clé si le secret `SIGNING_KEY` existe ; sinon il utilise une clé de
+debug temporaire pour que le build fonctionne quand même.
 
 Depuis le navigateur du téléphone :
 
 1. Ouvrez le dépôt sur GitHub → **Settings** → **Secrets and variables** → **Actions**
    (en mode « Version pour ordinateur » si le menu n'apparaît pas).
-2. Touchez **New repository secret** et créez, un par un :
-
-| Nom | Valeur |
-|---|---|
-| `KEYSTORE_BASE64` | le contenu base64 du keystore (une longue ligne) |
-| `KEYSTORE_PASSWORD` | le mot de passe du keystore |
-| `KEY_ALIAS` | `reunions` |
-| `KEY_PASSWORD` | le mot de passe de la clé (identique au précédent) |
-
-3. Relancez le build : **Actions → Build APK → Run workflow** (ou faites un nouveau push sur `main`).
+2. Touchez **New repository secret** : Name = `SIGNING_KEY`, Secret = le mot de passe du keystore,
+   **un espace**, puis le keystore encodé en base64 (une seule ligne). L'alias de la clé est `reunions`.
+3. Relancez le build : **Actions → Build APK → Run workflow** (branche `main`).
    La release indiquera « Signé avec la clé de release ».
 
 **Conservez précieusement** ces valeurs (gestionnaire de mots de passe) : sans elles, il est impossible de
@@ -107,7 +100,7 @@ Pour générer un nouveau keystore (sur n'importe quel ordinateur avec Java) :
 
 ```bash
 keytool -genkeypair -keystore release.jks -alias reunions -keyalg RSA -keysize 4096 -validity 10000
-base64 -w0 release.jks   # -> valeur de KEYSTORE_BASE64
+echo "MOT_DE_PASSE $(base64 -w0 release.jks)"   # -> valeur de SIGNING_KEY
 ```
 
 ## 🛠️ Build (GitHub Actions)

@@ -48,8 +48,18 @@ jobs:
 
       - name: Keystore de signature
         env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
+          # Secret unique SIGNING_KEY = "<mot de passe> <keystore en base64>" (alias : reunions)
+          if [ -n "$SIGNING_KEY" ]; then
+            PW="${SIGNING_KEY%% *}"
+            KEYSTORE_BASE64="${SIGNING_KEY#* }"
+            echo "::add-mask::$PW"
+            echo "KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=reunions" >> "$GITHUB_ENV"
+          fi
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
@@ -62,10 +72,15 @@ jobs:
 
       - name: Compilation de l'APK release
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew --no-daemon assembleRelease
+          SECRET_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          SECRET_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SECRET_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # Repli sur les anciens secrets séparés si SIGNING_KEY n'est pas utilisé
+          export KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD:-$SECRET_KEYSTORE_PASSWORD}"
+          export KEY_ALIAS="${KEY_ALIAS:-$SECRET_KEY_ALIAS}"
+          export KEY_PASSWORD="${KEY_PASSWORD:-$SECRET_KEY_PASSWORD}"
+          ./gradlew --no-daemon assembleRelease
 
       - name: Vérification « aucune permission réseau »
         run: bash scripts/check_no_network.sh app/build/outputs/apk/release/app-release.apk
