@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+/app/src/main/assets/models/
+/models-cache/
+/app/libs/*.aar
+*.jks
+*.keystore
+captures/

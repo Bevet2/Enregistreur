@@ -1,0 +1,97 @@
+name: Build APK
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
+      MODELS_CACHE: ${{ github.workspace }}/models-cache
+
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache des modèles d'IA
+        uses: actions/cache@v4
+        with:
+          path: models-cache
+          key: models-${{ hashFiles('scripts/download_models.sh') }}
+
+      - name: Téléchargement de sherpa-onnx et des modèles
+        run: bash scripts/download_models.sh
+
+      - name: Tests unitaires
+        run: ./gradlew --no-daemon testReleaseUnitTest
+
+      - name: Keystore de signature
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "SIGNATURE=release" >> "$GITHUB_ENV"
+            echo "Keystore de release trouvé."
+          else
+            echo "SIGNATURE=debug" >> "$GITHUB_ENV"
+            echo "::warning::Secret KEYSTORE_BASE64 absent : APK signé avec une clé de DEBUG (voir README)."
+          fi
+
+      - name: Compilation de l'APK release
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Vérification « aucune permission réseau »
+        run: bash scripts/check_no_network.sh app/build/outputs/apk/release/app-release.apk
+
+      - name: Préparation de l'APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/Reunions-hors-ligne-v${VERSION_NAME}.apk"
+          ls -lh dist
+          "$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)" verify --print-certs dist/*.apk | head -5
+
+      - name: Publication GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$SIGNATURE" = "release" ]; then
+            SIGN_NOTE="Signé avec la clé de release : s'installe par-dessus la version précédente."
+          else
+            SIGN_NOTE="⚠️ Signé avec une clé de DEBUG temporaire (secrets absents) : désinstallez avant d'installer une autre version. Voir le README pour configurer la signature."
+          fi
+          gh release create "v${VERSION_NAME}" dist/*.apk \
+            --target "$GITHUB_SHA" \
+            --title "Réunions hors ligne v${VERSION_NAME}" \
+            --notes "Application Android de transcription de réunions, 100 % hors ligne.
+
+          - Téléchargez **Reunions-hors-ligne-v${VERSION_NAME}.apk** depuis votre téléphone puis ouvrez-le.
+          - ${SIGN_NOTE}
+          - Commit : ${GITHUB_SHA}"
