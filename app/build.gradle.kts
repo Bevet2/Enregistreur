@@ -54,6 +54,7 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             testProguardFiles("proguard-test-rules.pro")
+            if (e2e) proguardFile("proguard-e2e.pro")
             signingConfig = if (releaseKeystore != null) {
                 signingConfigs.getByName("release")
             } else {
