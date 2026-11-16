@@ -132,13 +132,12 @@ class TranscriptionPipeline(
                     val samples = reader.read(start, len)
                     val offsetMs = start * 1000 / Wav.SAMPLE_RATE
                     step("diarisation, tranche ${c + 1}/$nChunks")
-                    val segs: Array<OfflineSpeakerDiarizationSegment> =
-                        sd.processWithCallback(samples, { done, tot, _ ->
-                            val f = (c + done.toDouble() / max(1, tot)) / nChunks
-                            report("Identification des intervenants", 0, f * 0.95,
-                                (SystemClock.elapsedRealtime() - t0) / 1000.0)
-                            0
-                        })
+                    // NB : pas de processWithCallback. Le code natif de sherpa-onnx y cherche une
+                    // méthode invoke(IIJ)Ljava/lang/Integer; qui n'existe pas avec les lambdas
+                    // Kotlin 2 : l'appel faisait planter tout le processus (arrêt de l'app).
+                    report("Identification des intervenants", 0, (c + 0.5) / nChunks,
+                        (SystemClock.elapsedRealtime() - t0) / 1000.0)
+                    val segs: Array<OfflineSpeakerDiarizationSegment> = sd.process(samples)
                     val turns = segs.map {
                         Turn(offsetMs + (it.start * 1000).toLong(), offsetMs + (it.end * 1000).toLong(), it.speaker)
                     }
