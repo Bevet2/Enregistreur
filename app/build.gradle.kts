@@ -34,7 +34,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // En test e2e, on teste l'APK release (minifié par R8), comme sur le téléphone.
+    // En test e2e, on teste l'APK release, exactement comme sur le téléphone.
     if (e2e) testBuildType = "release"
 
     signingConfigs {
@@ -50,11 +50,12 @@ android {
 
     buildTypes {
         release {
-            // En test e2e, pas de R8 (il retire des classes dont le runner de test a besoin).
-            isMinifyEnabled = !e2e
-            isShrinkResources = !e2e
+            // Pas de R8 : le code natif de sherpa-onnx accède aux classes Kotlin par JNI
+            // (noms de champs et de méthodes) ; l'optimisation risque de les casser.
+            // Le gain serait négligeable (l'APK pèse surtout par ses modèles).
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            testProguardFiles("proguard-test-rules.pro")
             signingConfig = if (releaseKeystore != null) {
                 signingConfigs.getByName("release")
             } else {
@@ -115,5 +116,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }

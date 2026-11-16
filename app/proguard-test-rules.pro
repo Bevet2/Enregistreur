@@ -1,4 +1,0 @@
--dontwarn com.google.errorprone.annotations.**
--dontwarn org.junit.**
--dontwarn javax.lang.model.**
--keep class fr.reunion.enregistreur.PipelineE2ETest { *; }

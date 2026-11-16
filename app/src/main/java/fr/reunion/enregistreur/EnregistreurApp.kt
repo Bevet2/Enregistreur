@@ -25,6 +25,17 @@ class EnregistreurApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Mémorise toute erreur fatale pour l'afficher au prochain lancement.
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            try {
+                java.io.File(filesDir, "last_crash.txt").writeText(
+                    "${error.javaClass.simpleName}: ${error.message}\n" +
+                        error.stackTrace.take(6).joinToString("\n") { "  at $it" }
+                )
+            } catch (_: Throwable) { }
+            previous?.uncaughtException(thread, error)
+        }
         repository = Repository(AppDatabase.create(this), filesDir)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
@@ -59,17 +70,20 @@ class EnregistreurApp : Application() {
         }
         if (TranscriptionState.state.value.meetingId == null) {
             val step = TranscriptionPipeline.lastStep(this)
-            val crash = if (step != null) lastExitDescription() else null
+            val crashFile = java.io.File(filesDir, "last_crash.txt")
+            val javaError = crashFile.takeIf { it.exists() }?.readText()
+            val crash = javaError?.lineSequence()?.firstOrNull() ?: lastExitDescription()
             for (m in repository.meetingsWithStatus(MeetingStatus.TRANSCRIBING)) {
-                if (step != null && crash != null) {
+                if (crash != null) {
                     repository.setStatus(
                         m.id, MeetingStatus.FAILED,
-                        "l'application s'est arrêtée ($crash) pendant : $step. " +
-                            "Touchez Réessayer : l'étape fautive sera contournée si possible.",
+                        "l'application s'est arrêtée ($crash)" + (step?.let { " pendant : $it" } ?: "") +
+                            ". Touchez Réessayer.",
                     )
                 } else repository.setStatus(m.id, MeetingStatus.INTERRUPTED)
             }
             TranscriptionPipeline.setStep(this, null)
+            crashFile.delete()
         }
     }
 
