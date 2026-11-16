@@ -17,6 +17,9 @@ val sherpaOnnxVersion = "1.13.8"
 // Signature : keystore fourni par les secrets GitHub, sinon repli sur la clé de debug.
 val releaseKeystore = System.getenv("KEYSTORE_FILE")?.let { File(it) }?.takeIf { it.isFile }
 
+// Test de bout en bout sur émulateur x86_64 (CI) : ./gradlew -Pe2e ...
+val e2e = project.hasProperty("e2e")
+
 android {
     namespace = "fr.reunion.enregistreur"
     compileSdk = 36
@@ -27,8 +30,12 @@ android {
         targetSdk = 36
         versionCode = ciVersionCode
         versionName = ciVersionName
-        ndk { abiFilters += listOf("arm64-v8a") }
+        ndk { abiFilters += if (e2e) listOf("arm64-v8a", "x86_64") else listOf("arm64-v8a") }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    // En test e2e, on teste l'APK release (minifié par R8), comme sur le téléphone.
+    if (e2e) testBuildType = "release"
 
     signingConfigs {
         if (releaseKeystore != null) {
@@ -104,4 +111,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
